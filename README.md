@@ -4,7 +4,7 @@
 
 This repository hosts the code that run my personal cloud infrastructure, composed by:
 
-* A highly-available load balancer, which also will provide DNS service
+* A load balancer, which also will provide DNS service
 * A public web server serving static content
 * A public e-mail server that runs my domain's e-mail service
 * A private authentication framework
@@ -36,7 +36,8 @@ This repository hosts the code that run my personal cloud infrastructure, compos
     * [Spamhaus ZEN](https://www.spamhaus.org/zen/)
     * [Nolisting](https://en.wikipedia.org/wiki/Nolisting)
 * [DNSMasq](http://www.thekelleys.org.uk/dnsmasq/doc.html) will be installed on all virtual machines to provide local DNS cache.
-* The load balancer will run [Keepalived](https://keepalived.org/manpage.html), [HAproxy](https://www.haproxy.org/#docs) and [ISC Bind](https://bind9.readthedocs.io/en/latest/).
+* The load balancer will run [HAproxy](https://www.haproxy.org/#docs) and [ISC Bind](https://bind9.readthedocs.io/en/latest/).
+    * I will not be able to run [Keepalived](https://keepalived.org/manpage.html) because cloud providers don't support multicast traffic nor gratuitous ARP / unsolicited neighbour advertisements for security reasons.
 * Firewall will be provided by [NFTables](https://wiki.nftables.org/).
 * Authentication framework will be based on [389-ds](https://www.port389.org/docs/389ds/documentation.html) and [MIT Kerberos](https://web.mit.edu/Kerberos/krb5-latest/doc/).
 * Monitoring and telemetry will use [Zabbix](https://www.zabbix.com/documentation/current/manual).
@@ -49,6 +50,7 @@ This repository hosts the code that run my personal cloud infrastructure, compos
 #### General
 * Each component should be highly available and at least two instances of each component should be deployed.
 * If the underlying protocol does not allow load balancing naturally, connections should be diverted to the load balancer.
+    * NOTE: the load balancer itself will not be highly available.
 
 #### Network
 * The machines will be instantiated with a dynamic public IP address. That is caracteristic to cloud environmnent, unless I create a private network and connect to it via VPN in advance.
