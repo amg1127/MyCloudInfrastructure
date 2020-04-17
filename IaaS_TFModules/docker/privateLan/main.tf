@@ -1,7 +1,7 @@
 # https://www.terraform.io/docs/providers/docker/r/network.html
 
-resource "docker_network" "privateLan" {
-    name = "lan_${replace(var.v4CIDRBlock, "/\\D+/", "_")}"
+resource "docker_network" "privateDockerNetwork" {
+    name = "privLan_${replace(var.v4CIDRBlock, "/\\D+/", "_")}"
     driver = "bridge"
     options = {
         enable_icc = true
@@ -14,5 +14,5 @@ resource "docker_network" "privateLan" {
 }
 
 locals {
-    privateLanID = docker_network.privateLan.id
+    privateLanID = docker_network.privateDockerNetwork.id
 }
