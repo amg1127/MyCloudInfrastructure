@@ -52,6 +52,14 @@ resource "docker_container" "dockerContainer" {
         "/run": "exec",
         "/run/lock": "noexec"
     }
+    dynamic "volumes" {
+        for_each = var.sharedFileSystems
+        content {
+            volume_name = volumes.value.fileSystemID
+            container_path = volumes.value.mountPoint
+            read_only = false
+        }
+    }
     upload {
         content = file(local.SSHPublicKeyPath)
         file = local.administrativeSSHAuthorizedKeyFile
@@ -87,7 +95,7 @@ resource "docker_container" "dockerContainer" {
 resource "null_resource" "dockerContainerPoller" {
     triggers = {
         containerName = docker_container.dockerContainer.name
-        containerIPs = join(",", docker_container.dockerContainer.network_data[*].ip_address)
+        containerIPs = join(",", sort(docker_container.dockerContainer.network_data[*].ip_address))
     }
 
     provisioner "local-exec" {

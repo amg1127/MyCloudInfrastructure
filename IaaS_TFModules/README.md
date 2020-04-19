@@ -4,7 +4,7 @@
 * A symbolic link named *active* will refer to the active cloud provider. Therefore, switching cloud provider will require the following procedure:
     * Run `terraform destroy`
     * Change symlink target
-    * Run `terraform init -upgrade=true`
+    * Run `terraform init -upgrade`
     * Run `terraform plan`
     * Run `terraform apply`
 * All terraform modules will share a common set of input and output variables, as described in `<resourceModule>.variables.tf` and `<resourceModule>.outputs.tf`. To maintain interface consistence, these files will respectively be targets of symlinks named `variables.tf` and `outputs.tf` located in each resource's module.

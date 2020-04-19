@@ -72,13 +72,23 @@ variable "SSHKeyPairPath" {
 
 ##############################################################################
 
+locals {
+    SharedServerFileSystemMountPoint = "/srv"
+}
+
 # Step 1: the private network
 module "privateLan" {
     source = "./IaaS_TFModules/active/privateLan"
     v4CIDRBlock = var.privateLanV4CIDRBlock
 }
 
-# Step 2: the load balancers
+# Step 2: a shared file system to be mounted by web and e-mail servers
+module "sharedFileSystem" {
+    source = "./IaaS_TFModules/active/sharedFileSystem"
+    fileSystemName = "SharedServerFileSystem"
+}
+
+# Step 3: the load balancers
 module "vmLoadBalancers" {
     source = "./IaaS_TFModules/active/virtualMachine"
 #    count = var.cloudLBHosts
@@ -89,9 +99,10 @@ module "vmLoadBalancers" {
 #    virtualMachinePrivIPv4 = cidrhost(var.privateLanV4CIDRBlock, (var.privateLanStartIP + count.index))
     virtualMachinePrivIPv4 = cidrhost(var.privateLanV4CIDRBlock, var.privateLanStartIP)
     SSHKeyPairPath = var.SSHKeyPairPath
+    sharedFileSystems = []
 }
 
-# Step 3: the authentication servers, next to the load balancers
+# Step 4: the authentication servers, next to the load balancers
 module "vmAuthenticationServers" {
     source = "./IaaS_TFModules/active/virtualMachine"
 #    count = var.cloudAuthServersCount
@@ -101,9 +112,10 @@ module "vmAuthenticationServers" {
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmLoadBalancers[module.vmLoadBalancers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmLoadBalancers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
     SSHKeyPairPath = var.SSHKeyPairPath
+    sharedFileSystems = []
 }
 
-# Step 4: the monitoring servers, next to the authentication servers
+# Step 5: the monitoring servers, next to the authentication servers
 module "vmMonitorServers" {
     source = "./IaaS_TFModules/active/virtualMachine"
 #    count = var.cloudMonitServersCount
@@ -113,9 +125,10 @@ module "vmMonitorServers" {
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmAuthenticationServers[module.vmAuthenticationServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmAuthenticationServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
     SSHKeyPairPath = var.SSHKeyPairPath
+    sharedFileSystems = []
 }
 
-# Step 5: the web servers, next to the monitoring servers
+# Step 6: the web servers, next to the monitoring servers
 module "vmWWWServers" {
     source = "./IaaS_TFModules/active/virtualMachine"
 #    count = var.cloudWWWServersCount
@@ -125,10 +138,15 @@ module "vmWWWServers" {
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmMonitorServers[module.vmMonitorServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmMonitorServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
     SSHKeyPairPath = var.SSHKeyPairPath
+    sharedFileSystems = [
+        {
+            fileSystemID = module.sharedFileSystem.fileSystemID
+            mountPoint = local.SharedServerFileSystemMountPoint
+        }
+    ]
 }
 
-
-# Step 6: the e-mail servers, next to the web servers
+# Step 7: the e-mail servers, next to the web servers
 module "vmMTAServers" {
     source = "./IaaS_TFModules/active/virtualMachine"
 #    count = var.cloudMTAServersCount
@@ -138,4 +156,10 @@ module "vmMTAServers" {
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmWWWServers[module.vmWWWServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmWWWServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
     SSHKeyPairPath = var.SSHKeyPairPath
+    sharedFileSystems = [
+        {
+            fileSystemID = module.sharedFileSystem.fileSystemID
+            mountPoint = local.SharedServerFileSystemMountPoint
+        }
+    ]
 }

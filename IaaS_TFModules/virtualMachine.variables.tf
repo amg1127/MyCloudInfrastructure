@@ -67,3 +67,16 @@ output "SSHKeyPairPath" {
     value = var.SSHKeyPairPath
 }
 
+variable "sharedFileSystems" {
+    type = list (
+        object ({
+            fileSystemID = any
+            mountPoint = string
+        })
+    )
+    description = "A list of shared file systems to mount inside the virtual machine. Each item is a object containing the attributes 'fileSystemID' and 'mountPoint', which are respectively the ID of an already created shared file system and the path of the mount point."
+}
+
+output "sharedFileSystems" {
+    value = var.sharedFileSystems
+}
