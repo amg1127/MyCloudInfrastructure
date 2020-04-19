@@ -75,8 +75,9 @@ resource "docker_container" "dockerContainer" {
         nameserver 8.8.8.8
         nameserver 8.8.4.4
         DNSCONFIG
+        mkdir -p "${local.remoteScriptFolder}"
         /bin/chmod -Rv go-rwx "${local.administrativeSSHFolder}"
-        /usr/bin/apt-get update && /usr/bin/apt-get -y install procps psmisc ssh systemd
+        /usr/bin/apt-get update && /usr/bin/apt-get -y install ansible git procps psmisc ssh systemd
         /bin/systemctl enable ssh
         /bin/systemctl set-default multi-user.target
         /bin/chmod -v -x "${local.provisionerScript}"
@@ -91,11 +92,19 @@ resource "docker_container" "dockerContainer" {
     working_dir = "/"
 }
 
-# This null resource waits for the SSH service of the new container to be accessible
+# This null resource waits for the SSH service of the new container to be accessible and preconfigures Ansible (and its dependencies)
 resource "null_resource" "dockerContainerPoller" {
     triggers = {
         containerName = docker_container.dockerContainer.name
         containerIPs = join(",", sort(docker_container.dockerContainer.network_data[*].ip_address))
+    }
+    
+    connection {
+        type = "ssh"
+        user = local.administrativeSSHUser
+        host = local.virtualMachinePubIPv4
+        private_key = file(local.SSHPrivateKeyPath)
+        script_path = local.remoteScriptFolder
     }
 
     provisioner "local-exec" {
@@ -110,7 +119,8 @@ locals {
     administrativeSSHUserHome = "/${local.administrativeSSHUser}"
     administrativeSSHFolder = "${local.administrativeSSHUserHome}/.ssh"
     administrativeSSHAuthorizedKeyFile = "${local.administrativeSSHFolder}/authorized_keys"
-    provisionerScript = "${local.administrativeSSHUserHome}/.first_boot_provisioner_${random_uuid.provisionerTriggerUUID.result}.sh"
+    remoteScriptFolder = "${local.administrativeSSHUserHome}/scripts"
+    provisionerScript = "${local.remoteScriptFolder}/first_boot_provisioner_${random_uuid.provisionerTriggerUUID.result}.sh"
     virtualMachineID = var.hostName
     virtualMachinePubIPv4 = [for network in docker_container.dockerContainer.network_data : network.ip_address if network.network_name == local.dockerDefaultNetwork][0]
 }

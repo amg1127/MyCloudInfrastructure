@@ -20,50 +20,22 @@ variable "cloudTestSubdomainProd" {
     default = "prod"
 }
 
-# The quantity of virtual hosts to be created
-# These variables are being ignored currently because "module" statement does not support "count" parameter yet: https://github.com/hashicorp/terraform/issues/17519
-variable "cloudLBServersCount" {
-    type = number
-    description = "Number of load balancers"
-    default = 2
-}
-variable "cloudWWWServersCount" {
-    type = number
-    description = "Number of web servers"
-    default = 3
-}
-variable "cloudMTAServersCount" {
-    type = number
-    description = "Number of e-mail servers"
-    default = 3
-}
-variable "cloudAuthServersCount" {
-    type = number
-    description = "Number of authentication servers"
-    default = 2
-}
-variable "cloudMonitServersCount" {
-    type = number
-    description = "Number of monitoring instances"
-    default = 1
-}
-
 ############# Address assignment configuration
 
-# The private and isolated network that machines will use to communicate securely to each other
-variable "privateLanV4CIDRBlock" {
+# The private and isolated network that test machines will use to communicate securely to each other
+variable "privateTestLanV4CIDRBlock" {
     type = string
     description = "The RFC1918 network block to use internally (example: '192.168.1.0/24')"
 }
 
-# This number defines the last octet of the first IP address to be allocated inside the private network
-variable "privateLanStartIP" {
-    type = number
-    description = "The last octet of the first IP address to be allocated inside the private network"
-    default = 4
+# The private and isolated network that production machines will use to communicate securely to each other
+variable "privateProdLanV4CIDRBlock" {
+    type = string
+    description = "The RFC1918 network block to use internally (example: '192.168.1.0/24')"
 }
 
 ############# Security configuration
+
 # Path to a SSH keypair to be used to authenticate as machine administrator
 variable "SSHKeyPairPath" {
     type = string
@@ -72,94 +44,30 @@ variable "SSHKeyPairPath" {
 
 ##############################################################################
 
-locals {
-    SharedServerFileSystemMountPoint = "/srv"
-}
-
-# Step 1: the private network
-module "privateLan" {
-    source = "./IaaS_TFModules/active/privateLan"
-    v4CIDRBlock = var.privateLanV4CIDRBlock
-}
-
-# Step 2: a shared file system to be mounted by web and e-mail servers
-module "sharedFileSystem" {
-    source = "./IaaS_TFModules/active/sharedFileSystem"
-    fileSystemName = "SharedServerFileSystem"
-}
-
-# Step 3: the load balancers
-module "vmLoadBalancers" {
-    source = "./IaaS_TFModules/active/virtualMachine"
-#    count = var.cloudLBHosts
-#    hostName = "lb${count.index}"
-    hostName = "lb"
-    fixedIPv4 = true
-    privateLanID = module.privateLan.privateLanID
-#    virtualMachinePrivIPv4 = cidrhost(var.privateLanV4CIDRBlock, (var.privateLanStartIP + count.index))
-    virtualMachinePrivIPv4 = cidrhost(var.privateLanV4CIDRBlock, var.privateLanStartIP)
+# Test infrastructure
+module "testInfrastructure" {
+    source = "./IaaS_TFInfrastructure"
+    environment = var.cloudTestSubdomainTest
+    domain = var.cloudDomainName
+    privateLanV4CIDRBlock = var.privateTestLanV4CIDRBlock
     SSHKeyPairPath = var.SSHKeyPairPath
-    sharedFileSystems = []
+    cloudLBServersCount = 2
+    cloudWWWServersCount = 2
+    cloudMTAServersCount = 2
+    cloudAuthServersCount = 2
+    cloudMonitServersCount = 1
 }
 
-# Step 4: the authentication servers, next to the load balancers
-module "vmAuthenticationServers" {
-    source = "./IaaS_TFModules/active/virtualMachine"
-#    count = var.cloudAuthServersCount
-#    hostName = "auth${count.index}"
-    hostName = "auth"
-    privateLanID = module.privateLan.privateLanID
-#    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmLoadBalancers[module.vmLoadBalancers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
-    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmLoadBalancers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
+# Production infrastructure
+module "prodInfrastructure" {
+    source = "./IaaS_TFInfrastructure"
+    environment = var.cloudTestSubdomainProd
+    domain = var.cloudDomainName
+    privateLanV4CIDRBlock = var.privateProdLanV4CIDRBlock
     SSHKeyPairPath = var.SSHKeyPairPath
-    sharedFileSystems = []
-}
-
-# Step 5: the monitoring servers, next to the authentication servers
-module "vmMonitorServers" {
-    source = "./IaaS_TFModules/active/virtualMachine"
-#    count = var.cloudMonitServersCount
-#    hostName = "monit${count.index}"
-    hostName = "monit"
-    privateLanID = module.privateLan.privateLanID
-#    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmAuthenticationServers[module.vmAuthenticationServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
-    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmAuthenticationServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
-    sharedFileSystems = []
-}
-
-# Step 6: the web servers, next to the monitoring servers
-module "vmWWWServers" {
-    source = "./IaaS_TFModules/active/virtualMachine"
-#    count = var.cloudWWWServersCount
-#    hostName = "www${count.index}"
-    hostName = "www"
-    privateLanID = module.privateLan.privateLanID
-#    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmMonitorServers[module.vmMonitorServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
-    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmMonitorServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
-    sharedFileSystems = [
-        {
-            fileSystemID = module.sharedFileSystem.fileSystemID
-            mountPoint = local.SharedServerFileSystemMountPoint
-        }
-    ]
-}
-
-# Step 7: the e-mail servers, next to the web servers
-module "vmMTAServers" {
-    source = "./IaaS_TFModules/active/virtualMachine"
-#    count = var.cloudMTAServersCount
-#    hostName = "mx${count.index}"
-    hostName = "mx"
-    privateLanID = module.privateLan.privateLanID
-#    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmWWWServers[module.vmWWWServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
-    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmWWWServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
-    sharedFileSystems = [
-        {
-            fileSystemID = module.sharedFileSystem.fileSystemID
-            mountPoint = local.SharedServerFileSystemMountPoint
-        }
-    ]
+    cloudLBServersCount = 2
+    cloudWWWServersCount = 3
+    cloudMTAServersCount = 3
+    cloudAuthServersCount = 2
+    cloudMonitServersCount = 1
 }
