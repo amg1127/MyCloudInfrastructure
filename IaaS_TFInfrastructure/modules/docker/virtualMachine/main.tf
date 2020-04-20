@@ -22,6 +22,8 @@ resource "docker_container" "dockerContainer" {
     start = true
     must_run = true
     command = [ "/bin/bash", "-c", "[ -x \"$${1}\" ] && { \"$${1}\" || exit 1; }; unset HOSTNAME HOME PWD TERM SHLVL PATH; export container=docker; exec -a /sbin/init /lib/systemd/systemd --system", "/sbin/init", local.provisionerScript ]
+    memory = 1024
+    memory_swap = 2048
     capabilities {
         add = [
             # Required for Netfilter
