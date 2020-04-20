@@ -47,3 +47,4 @@
         name: "{{ AnsibleBootstrapServiceName }}.service"
         state: restarted
         no_block: yes
+      changed_when: false
