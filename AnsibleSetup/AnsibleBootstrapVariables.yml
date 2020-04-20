@@ -1,0 +1,12 @@
+---
+AnsibleBootstrapServiceName: "MyCloudInfrastructure-AnsibleSetup"
+RequiredPackages:
+  - dnsmasq
+  - git
+  - less
+  - man
+  - vim
+RequiredPackagesFamilySpecific:
+  Debian:
+    # Testing purposes
+    - debianutils

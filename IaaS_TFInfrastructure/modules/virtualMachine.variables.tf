@@ -49,22 +49,17 @@ output "virtualMachinePrivIPv4" {
     value = var.virtualMachinePrivIPv4
 }
 
-variable "SSHKeyPairPath" {
+variable "SSHPublicKeyPath" {
     type = string
-    description = "Path to a SSH keypair to be used to authenticate as machine administrator"
+    description = "Path to a SSH public key to be used to authenticate as machine administrator"
     validation {
-        condition = can(regex("^\\w+(-\\w+)*\\s+\\w", file("${var.SSHKeyPairPath}.pub")))
-        error_message = "Variable SSHKeyPairPath is not valid."
+        condition = can(regex("^\\w+(-\\w+)*\\s+\\w", file("${var.SSHPublicKeyPath}")))
+        error_message = "Variable SSHPublicKeyPath is not valid."
     }
 }
 
-locals {
-    SSHPrivateKeyPath = var.SSHKeyPairPath
-    SSHPublicKeyPath = "${var.SSHKeyPairPath}.pub"
-}
-
-output "SSHKeyPairPath" {
-    value = var.SSHKeyPairPath
+output "SSHPublicKeyPath" {
+    value = var.SSHPublicKeyPath
 }
 
 variable "sharedFileSystems" {
@@ -80,3 +75,17 @@ variable "sharedFileSystems" {
 output "sharedFileSystems" {
     value = var.sharedFileSystems
 }
+
+variable "serverRole" {
+    type = string
+    description = "Role of the server."
+    validation {
+        condition = can(regex("^\\w+$$", var.serverRole))
+        error_message = "Variable serverRole is not valid."
+    }
+}
+
+output "serverRole" {
+    value = var.serverRole
+}
+

@@ -1,0 +1,49 @@
+---
+- hosts: localhost
+  tasks:
+    - name: Update APT cache in Debian-based systems
+      apt:
+        update_cache: yes
+      when: ansible_facts['os_family'] == "Debian"
+    - name: Install required packages
+      package:
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - "{{ RequiredPackages }}"
+        - "{{ RequiredPackagesFamilySpecific[ansible_facts['os_family']] | default(omit) }}"
+    - name: Create second-stage bootstrap launcher - systemd timer
+      copy:
+        content: |
+          [Unit]
+          After=multi-user.target
+
+          [Timer]
+          OnBootSec=5
+          OnActiveSec=3d
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/{{ AnsibleBootstrapServiceName }}.timer"
+    - name: Create second-stage bootstrap launcher - systemd service
+      copy:
+        content: |
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/flock --exclusive --timeout 30 /run/{{ AnsibleBootstrapServiceName }}.lock /usr/local/bin/{{ AnsibleBootstrapServiceName }}.sh
+        dest: "/etc/systemd/system/{{ AnsibleBootstrapServiceName }}.service"
+    - name: Deploy the second-state bootstrap script
+      copy:
+        src: "{{ AnsibleBootstrapScriptSource }}"
+        dest: "/usr/local/bin/{{ AnsibleBootstrapServiceName }}.sh"
+        mode: "0755"
+    - name: Activate the second-stage bootstrap timer
+      systemd:
+        name: "{{ AnsibleBootstrapServiceName }}.timer"
+        daemon_reload: yes
+        enabled: yes
+    - name: Trigger the second-stage bootstrap script
+      systemd:
+        name: "{{ AnsibleBootstrapServiceName }}.service"
+        state: restarted
+        no_block: yes

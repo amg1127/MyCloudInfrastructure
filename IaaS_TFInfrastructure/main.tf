@@ -73,7 +73,20 @@ variable "SSHKeyPairPath" {
 ##############################################################################
 
 locals {
-    SharedServerFileSystemMountPoint = "/srv"
+    administrativeSSHUser = "root"
+    sharedServerFileSystemMountPoint = "/srv"
+    SSHPrivateKeyPath = var.SSHKeyPairPath
+    SSHPublicKeyPath = "${var.SSHKeyPairPath}.pub"
+    AnsibleBootstrapSourceFolder = "./AnsibleSetup"
+    AnsibleBootstrapDestinationFolder = "/tmp"
+    AnsibleBootstrapPlaybookSource = "${local.AnsibleBootstrapSourceFolder}/AnsibleBootstrapPlaybook.yml"
+    AnsibleBootstrapPlaybookDestination = "${local.AnsibleBootstrapDestinationFolder}/AnsibleBootstrapPlaybook.yml"
+    AnsibleBootstrapScriptSource = "${local.AnsibleBootstrapSourceFolder}/AnsibleBootstrap.sh"
+    AnsibleBootstrapScriptDestination = "${local.AnsibleBootstrapDestinationFolder}/AnsibleBootstrap.sh"
+    AnsibleBootstrapVariablesSource = "${local.AnsibleBootstrapSourceFolder}/AnsibleBootstrapVariables.yml"
+    AnsibleBootstrapVariablesDestination = "${local.AnsibleBootstrapDestinationFolder}/AnsibleBootstrapVariables.yml"
+    AnsibleSystemConfigFolder = "/etc/ansible"
+    AnsibleSystemInventoryFile = "${local.AnsibleSystemConfigFolder}/hosts"
 }
 
 # Step 1: the private network
@@ -98,8 +111,9 @@ module "vmLoadBalancers" {
     privateLanID = module.privateLan.privateLanID
 #    virtualMachinePrivIPv4 = cidrhost(var.privateLanV4CIDRBlock, (var.privateLanStartIP + count.index))
     virtualMachinePrivIPv4 = cidrhost(var.privateLanV4CIDRBlock, var.privateLanStartIP)
-    SSHKeyPairPath = var.SSHKeyPairPath
+    SSHPublicKeyPath = local.SSHPublicKeyPath
     sharedFileSystems = []
+    serverRole = "LoadBalancer"
 }
 
 # Step 4: the authentication servers, next to the load balancers
@@ -111,8 +125,9 @@ module "vmAuthenticationServers" {
     privateLanID = module.privateLan.privateLanID
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmLoadBalancers[module.vmLoadBalancers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmLoadBalancers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
+    SSHPublicKeyPath = local.SSHPublicKeyPath
     sharedFileSystems = []
+    serverRole = "AuthenticationServer"
 }
 
 # Step 5: the monitoring servers, next to the authentication servers
@@ -124,8 +139,9 @@ module "vmMonitorServers" {
     privateLanID = module.privateLan.privateLanID
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmAuthenticationServers[module.vmAuthenticationServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmAuthenticationServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
+    SSHPublicKeyPath = local.SSHPublicKeyPath
     sharedFileSystems = []
+    serverRole = "MonitorServer"
 }
 
 # Step 6: the web servers, next to the monitoring servers
@@ -137,13 +153,14 @@ module "vmWWWServers" {
     privateLanID = module.privateLan.privateLanID
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmMonitorServers[module.vmMonitorServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmMonitorServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
+    SSHPublicKeyPath = local.SSHPublicKeyPath
     sharedFileSystems = [
         {
             fileSystemID = module.sharedFileSystem.fileSystemID
-            mountPoint = local.SharedServerFileSystemMountPoint
+            mountPoint = local.sharedServerFileSystemMountPoint
         }
     ]
+    serverRole = "WebServer"
 }
 
 # Step 7: the e-mail servers, next to the web servers
@@ -155,11 +172,108 @@ module "vmMTAServers" {
     privateLanID = module.privateLan.privateLanID
 #    virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmWWWServers[module.vmWWWServers.count-1].virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1 + count.index)
     virtualMachinePrivIPv4 = cidrhost (var.privateLanV4CIDRBlock, parseint( replace( module.vmWWWServers.virtualMachinePrivIPv4 , "/^.*[\\.:](\\d+)$$/", "$1"), 10) + 1)
-    SSHKeyPairPath = var.SSHKeyPairPath
+    SSHPublicKeyPath = local.SSHPublicKeyPath
     sharedFileSystems = [
         {
             fileSystemID = module.sharedFileSystem.fileSystemID
-            mountPoint = local.SharedServerFileSystemMountPoint
+            mountPoint = local.sharedServerFileSystemMountPoint
         }
     ]
+    serverRole = "MailServer"
 }
+
+# Step 8: configure Ansible in all virtual machines, using provision of null resources
+# https://github.com/hashicorp/terraform/issues/22281
+locals {
+    allVirtualMachines = flatten([
+        module.vmLoadBalancers,
+        module.vmAuthenticationServers,
+        module.vmMonitorServers,
+        module.vmWWWServers,
+        module.vmMTAServers
+    ])
+    allServerRoles = sort(distinct([for m in local.allVirtualMachines : m.serverRole]))
+}
+
+resource "null_resource" "AnsibleBootstrap" {
+    for_each = { for k in local.allVirtualMachines : k.hostName => k.virtualMachinePubIPv4 }
+
+    connection {
+        type = "ssh"
+        user = local.administrativeSSHUser
+        host = each.value
+        private_key = file(local.SSHPrivateKeyPath)
+    }
+
+    triggers = {
+        vmPublicIP = each.value
+    }
+
+    # Generation and upload of an inventory file
+    provisioner "file" {
+        /* This code block raises syntax error - https://github.com/hashicorp/terraform/issues/24711
+        content = <<-ANSIBLEINVENTORY
+        # This file has been generated dynamically by Terraform.
+        # Beware: it can be overwritten anytime...
+
+        all:
+          hosts:
+            localhost:
+              ansible_connection: local
+            children:
+              {~% for sr in local.allServerRoles ~}
+              ${sr}:
+                hosts:
+                {~% for vm in local.AllVirtualMachines ~}
+                  {~% if sr == vm.serverRole ~}
+                  ${vm.hostName}:
+                    ansible_host: "${vm.virtualMachinePrivIPv4}"
+                  {~% endif ~}
+                {~% endfor ~}
+              {~% endfor ~}
+          vars:
+            ansible_python_interpreter: "/usr/bin/python3"
+        ANSIBLEINVENTORY
+        */
+
+        content = <<-ANSIBLEINVENTORY
+        # This file has been generated dynamically by Terraform.
+        # Beware: it can be overwritten anytime...
+
+        all:
+          hosts:
+            localhost:
+              ansible_connection: local
+          vars:
+            ansible_python_interpreter: "/usr/bin/python3"
+        ANSIBLEINVENTORY
+
+        destination = local.AnsibleSystemInventoryFile
+    }
+
+    # Upload of the bootstrap playbook
+    provisioner "file" {
+        source = local.AnsibleBootstrapPlaybookSource
+        destination = local.AnsibleBootstrapPlaybookDestination
+    }
+
+    # Upload of the bootstrap variables file
+    provisioner "file" {
+        source = local.AnsibleBootstrapScriptSource
+        destination = local.AnsibleBootstrapScriptDestination
+    }
+
+    # Upload of the bootstrap script
+    provisioner "file" {
+        source = local.AnsibleBootstrapVariablesSource
+        destination = local.AnsibleBootstrapVariablesDestination
+    }
+
+    provisioner "remote-exec" {
+        # Bootstrap Ansible playbook from here
+        inline = [
+            "/usr/bin/ansible-playbook --verbose --extra-vars \"@${local.AnsibleBootstrapVariablesDestination}\" --extra-vars \"AnsibleBootstrapScriptSource=${local.AnsibleBootstrapScriptDestination}\" \"${local.AnsibleBootstrapPlaybookDestination}\""
+        ]
+    }
+}
+
