@@ -211,39 +211,25 @@ resource "null_resource" "AnsibleBootstrap" {
 
     # Generation and upload of an inventory file
     provisioner "file" {
-        /* This code block raises syntax error - https://github.com/hashicorp/terraform/issues/24711
         content = <<-ANSIBLEINVENTORY
         # This file has been generated dynamically by Terraform.
-        # Beware: it can be overwritten anytime...
+        # Beware: its contents may be overwritten anytime...
 
         all:
           hosts:
             localhost:
               ansible_connection: local
-            children:
-              {~% for sr in local.allServerRoles ~}
-              ${sr}:
-                hosts:
-                {~% for vm in local.AllVirtualMachines ~}
-                  {~% if sr == vm.serverRole ~}
-                  ${vm.hostName}:
-                    ansible_host: "${vm.virtualMachinePrivIPv4}"
-                  {~% endif ~}
-                {~% endfor ~}
-              {~% endfor ~}
-          vars:
-            ansible_python_interpreter: "/usr/bin/python3"
-        ANSIBLEINVENTORY
-        */
-
-        content = <<-ANSIBLEINVENTORY
-        # This file has been generated dynamically by Terraform.
-        # Beware: it can be overwritten anytime...
-
-        all:
-          hosts:
-            localhost:
-              ansible_connection: local
+          children:
+            %{~ for sr in local.allServerRoles ~}
+            ${sr}:
+              hosts:
+              %{~ for vm in local.allVirtualMachines ~}
+                %{~ if sr == vm.serverRole ~}
+                ${vm.hostName}:
+                  ansible_host: "${vm.virtualMachinePrivIPv4}"
+                %{~ endif ~}
+              %{~ endfor ~}
+            %{~ endfor ~}
           vars:
             ansible_python_interpreter: "/usr/bin/python3"
         ANSIBLEINVENTORY
