@@ -10,8 +10,8 @@
         name: "{{ item }}"
         state: latest
       loop:
-        - "{{ RequiredPackages }}"
-        - "{{ RequiredPackagesFamilySpecific[ansible_facts['os_family']] | default(omit) }}"
+        - "{{ RequiredPackages | default(omit, true) }}"
+        - "{{ RequiredPackagesFamilySpecific[ansible_facts['os_family']] | default(omit, true) }}"
     - name: Create second-stage bootstrap launcher - systemd timer
       copy:
         content: |
@@ -20,7 +20,7 @@
 
           [Timer]
           OnBootSec=5
-          OnActiveSec=3d
+          OnUnitActiveSec=3d
 
           [Install]
           WantedBy=multi-user.target
@@ -30,7 +30,7 @@
         content: |
           [Service]
           Type=oneshot
-          ExecStart=/usr/bin/flock --exclusive --timeout 30 /run/{{ AnsibleBootstrapServiceName }}.lock /usr/local/bin/{{ AnsibleBootstrapServiceName }}.sh
+          ExecStart=-/usr/bin/flock --exclusive --timeout 30 /run/{{ AnsibleBootstrapServiceName }}.lock /usr/local/bin/{{ AnsibleBootstrapServiceName }}.sh
         dest: "/etc/systemd/system/{{ AnsibleBootstrapServiceName }}.service"
     - name: Deploy the second-state bootstrap script
       copy:
