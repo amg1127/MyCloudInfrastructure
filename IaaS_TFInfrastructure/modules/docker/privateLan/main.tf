@@ -1,5 +1,14 @@
 # https://www.terraform.io/docs/providers/docker/r/network.html
 
+terraform {
+    required_providers {
+        docker = {
+            source = "terraform-providers/docker"
+        }
+    }
+}
+
+
 resource "docker_network" "privateDockerNetwork" {
     name = "privLan_${replace(var.v4CIDRBlock, "/\\D+/", "_")}"
     driver = "bridge"

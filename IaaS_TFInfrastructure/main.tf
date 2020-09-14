@@ -1,7 +1,3 @@
-terraform {
-    experiments = [variable_validation]
-}
-
 ############# Naming configuration
 
 # The domain name of the cloud network

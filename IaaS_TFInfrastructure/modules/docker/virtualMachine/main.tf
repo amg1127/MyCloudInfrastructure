@@ -1,5 +1,20 @@
 # https://www.terraform.io/docs/providers/docker/d/registry_image.html
 
+terraform {
+    required_providers {
+        docker = {
+            source = "terraform-providers/docker"
+        }
+        null = {
+            source = "hashicorp/null"
+        }
+        random = {
+            source = "hashicorp/random"
+        }
+    }
+}
+
+
 data "docker_registry_image" "distribution" {
     name = "debian:stable"
 }

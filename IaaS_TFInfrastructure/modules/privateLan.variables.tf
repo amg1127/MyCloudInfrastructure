@@ -1,9 +1,5 @@
 # privateLan - This module is meant to create a private and unrouteable network segment where virtual machine will exchange traffic.
 
-terraform {
-    experiments = [variable_validation]
-}
-
 variable "v4CIDRBlock" {
     type = string
     description = "IPv4 address block that the private network will use. It must be private addresses, as listed by RFC1918. Format: an IPv4 block in CIDR notation."

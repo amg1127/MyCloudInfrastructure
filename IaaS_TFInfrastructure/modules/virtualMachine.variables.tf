@@ -1,9 +1,5 @@
 # virtualMachine - This module is meant to create a virtual machine.
 
-terraform {
-    experiments = [variable_validation]
-}
-
 variable "hostName" {
     type = string
     description = "Name (and hostname) of the virtual machine to be created."
